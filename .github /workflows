@@ -1,0 +1,107 @@
+name: Convert Prefabs to VRM0.x
+
+on:
+  push:
+    paths:
+      - 'Assets/Prefabs/**.prefab'
+      - '.github/workflows/convert-prefabs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1) リポジトリをチェックアウト
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      # 2) Unity ライセンスをアクティベート
+      - name: Activate Unity license
+        uses: game-ci/unity-activate@v2
+        with:
+          unityLicense: ${{ secrets.UNITY_LICENSE_FILE }}
+
+      # 3) Unity セットアップ（2022.3 LTS / Linux Headless）
+      - name: Setup Unity
+        uses: game-ci/unity-builder@v2
+        with:
+          unityVersion: 2022.3.30f1
+          targetPlatform: StandaloneLinux64
+          buildPath: build
+
+      # 4) UPM 依存関係として UniVRM0.x を manifest.json に追加
+      - name: Generate manifest.json for UniVRM0.x
+        run: |
+          mkdir -p Packages
+          cat << 'EOF' > Packages/manifest.json
+          {
+            "dependencies": {
+              "com.unity.render-pipelines.core": "12.1.8", 
+              "com.vrmc.gltf": "https://github.com/vrm-c/UniVRM.git?path=/Assets/UniGLTF#v0.128.3",
+              "com.vrmc.univrm": "https://github.com/vrm-c/UniVRM.git?path=/Assets/VRM#v0.128.3"
+            }
+          }
+          EOF
+
+      # 5) Prefab→VRM0.x 変換用 C# エディタスクリプトを動的に生成
+      - name: Create PrefabToVRM0Exporter script
+        run: |
+          mkdir -p Assets/Editor
+          cat << 'EOF' > Assets/Editor/PrefabToVRM0Exporter.cs
+          using UnityEngine;
+          using UnityEditor;
+          using VRM;  // VRM 0.x namespace
+
+          public static class PrefabToVRM0Exporter {
+              public static void ExportAllPrefabs() {
+                  var outDir = "ExportedVRM0";
+                  if (!System.IO.Directory.Exists(outDir)) {
+                      System.IO.Directory.CreateDirectory(outDir);
+                  }
+                  // Assets/Prefabs 以下の全Prefabを取得
+                  var guids = AssetDatabase.FindAssets("t:Prefab", new[]{"Assets/Prefabs"});
+                  foreach (var guid in guids) {
+                      var path = AssetDatabase.GUIDToAssetPath(guid);
+                      var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                      var instance = PrefabUtility.InstantiatePrefab(prefab) as GameObject;
+                      // VRM0.x エクスポータでExport
+                      var exporter = new VRM0Exporter();
+                      var bytes = exporter.Export(instance);
+                      var outPath = System.IO.Path.Combine(outDir, prefab.name + ".vrm");
+                      System.IO.File.WriteAllBytes(outPath, bytes);
+                      GameObject.DestroyImmediate(instance);
+                  }
+                  AssetDatabase.Refresh();
+              }
+          }
+          EOF
+
+      # 6) Unity をバッチモードで実行 → Prefab→VRM0.x 変換
+      - name: Export Prefabs to VRM0.x
+        run: |
+          unity-editor \
+            -batchmode \
+            -nographics \
+            -quit \
+            -projectPath . \
+            -executeMethod PrefabToVRM0Exporter.ExportAllPrefabs \
+            -logFile /dev/stdout
+
+      # 7) 生成 VRM をコミット＆プッシュ
+      - name: Commit & Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ExportedVRM0/
+          if git diff --cached --quiet; then
+            echo "✅ No new VRM0.x files to commit"
+          else
+            git commit -m "Add/Update converted VRM0.x files"
+            git push
+          fi
