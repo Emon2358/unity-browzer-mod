@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>FBX → VRM1.x Converter (Browser + glTF-Transform)</title>
+  <title>FBX → VRM1.x Converter (Browser + glTF-Transform via esm.sh)</title>
 </head>
 <body>
   <h1>FBX → VRM1.x Converter</h1>
@@ -20,8 +20,10 @@
     import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js';
     import { FBXLoader }    from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/loaders/FBXLoader.js';
     import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/exporters/GLTFExporter.js';
-    import { WebIO }        from 'https://cdn.jsdelivr.net/npm/@gltf-transform/core@3.21.0/dist/gltf-transform-core.browser.esm.js';
-    import { VRMC_vrm }     from 'https://cdn.jsdelivr.net/npm/@gltf-transform/extensions@3.21.0/dist/extensions.browser.esm.js';
+
+    // Use esm.sh to get browser-ready ESM for glTF-Transform
+    import { WebIO }    from 'https://esm.sh/@gltf-transform/core@4.1.4';
+    import { VRMC_vrm } from 'https://esm.sh/@gltf-transform/extensions@4.1.4';
 
     const fbxInput    = document.getElementById('fbx-input');
     const titleInput  = document.getElementById('meta-title');
@@ -49,9 +51,8 @@
         async (result) => {
           const glbBytes = new Uint8Array(result.binary);
 
-          // 2) glTF-Transform で VRM + メタデータ埋め込み
-          const io = new WebIO()
-            .registerExtensions([VRMC_vrm]);
+          // 2) glTF-Transform (browser build via esm.sh) で VRM + メタデータ埋め込み
+          const io  = new WebIO().registerExtensions([VRMC_vrm]);
           const doc = await io.readBinary(glbBytes);
           const vrmExt = doc.createExtension(VRMC_vrm);
           const meta   = vrmExt.createMetadata();
