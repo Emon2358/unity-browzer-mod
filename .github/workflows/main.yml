@@ -17,9 +17,11 @@ jobs:
           persist-credentials: true
 
       - name: Setup Rust toolchain 🦀
-        uses: actions/setup-rust@v1
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          override: true
+          components: rustfmt  # 必要に応じて追加コンポーネントを指定
 
       - name: Download UnityPackage 📦
         id: download_pkg
@@ -29,7 +31,7 @@ jobs:
           curl -fSLo downloaded.unitypackage "$URL"
           echo "Downloaded size: $(du -h downloaded.unitypackage | cut -f1)"
           echo "MIME type: $(file --mime-type -b downloaded.unitypackage)"
-          # 簡易的な中身確認
+          # 簡易的な中身確認 (.unitypackage は gzip 圧縮された tar なので tar -tzf で確認可)
           tar -tzf downloaded.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
 
       - name: Prepare clean output directory
