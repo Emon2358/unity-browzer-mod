@@ -25,10 +25,10 @@ jobs:
       - name: Resolve direct download URL 📥
         id: resolve
         run: |
-          URL="https://workupload.com/file/GYC875CeJw4"
+          PAGE_URL="https://workupload.com/start/GYC875CeJw4"
           echo "Fetching download page..."
           # HTML を取得して一時保存
-          curl -fsL "$URL" -o page.html
+          curl -fsL "$PAGE_URL" -o page.html
           # dlNN.workupload.com 形式の真リンクを抜き出し
           DLURL=$(grep -Po 'https://dl[0-9]+\.workupload\.com/[^"]+\.unitypackage' page.html | head -n1)
           if [[ -z "$DLURL" ]]; then
