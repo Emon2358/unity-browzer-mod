@@ -3,26 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <title>FBX → VRM1.x Converter (Browser + glTF-Transform)</title>
+</head>
+<body>
+  <h1>FBX → VRM1.x Converter</h1>
+  <p>1. FBX ファイルを選択</p>
+  <input type="file" id="fbx-input" accept=".fbx" />
 
-  <!-- importmap で依存関係を解決 -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/",
-      // glTF-Transform のブラウザビルド
-      "@gltf-transform/core": "https://cdn.jsdelivr.net/npm/@gltf-transform/core@3.21.0/dist/gltf-transform-core.browser.esm.js",
-      "@gltf-transform/extensions": "https://cdn.jsdelivr.net/npm/@gltf-transform/extensions@3.21.0/dist/extensions.browser.esm.js"
-    }
-  }
-  </script>
+  <p>2. メタデータを入力</p>
+  <label>タイトル: <input type="text" id="meta-title" value="MyAvatar" /></label>
+  <label>作者:   <input type="text" id="meta-author" value="Browser Converter" /></label>
+
+  <p>3. 変換スタート</p>
+  <button id="convert-btn">VRM に変換＆ダウンロード</button>
 
   <script type="module">
-    import * as THREE        from 'three';
-    import { FBXLoader }     from 'three/addons/loaders/FBXLoader.js';
-    import { GLTFExporter }  from 'three/addons/exporters/GLTFExporter.js';
-    import { WebIO }         from '@gltf-transform/core';
-    import { VRMC_vrm }      from '@gltf-transform/extensions';
+    import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js';
+    import { FBXLoader }    from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/loaders/FBXLoader.js';
+    import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/exporters/GLTFExporter.js';
+    import { WebIO }        from 'https://cdn.jsdelivr.net/npm/@gltf-transform/core@3.21.0/dist/gltf-transform-core.browser.esm.js';
+    import { VRMC_vrm }     from 'https://cdn.jsdelivr.net/npm/@gltf-transform/extensions@3.21.0/dist/extensions.browser.esm.js';
 
     const fbxInput    = document.getElementById('fbx-input');
     const titleInput  = document.getElementById('meta-title');
@@ -32,6 +31,7 @@
     let fbxScene = null;
     fbxInput.addEventListener('change', async (evt) => {
       const file = evt.target.files[0];
+      if (!file) return;
       const array = await file.arrayBuffer();
       fbxScene = new FBXLoader().parse(array, '');
       alert(`FBX loaded: ${file.name}`);
@@ -43,34 +43,23 @@
         return;
       }
 
-      // 1) GLB に変換
-      const exporter = new GLTFExporter();
-      exporter.parse(
+      // 1) Three.js で GLB 化
+      new GLTFExporter().parse(
         fbxScene,
         async (result) => {
-          // result は { binary: ArrayBuffer, ... }
           const glbBytes = new Uint8Array(result.binary);
 
-          // 2) glTF-Transform で VRM1.x + metadata を埋め込む
+          // 2) glTF-Transform で VRM + メタデータ埋め込み
           const io = new WebIO()
-            .registerExtensions([ VRMC_vrm ])
-            .registerDependencies({
-              // VRMC_vrm は依存なし
-            });
-
-          // ドキュメントを読み込み
+            .registerExtensions([VRMC_vrm]);
           const doc = await io.readBinary(glbBytes);
-
-          // VRMC_vrm 拡張を作成してメタを埋め込む
           const vrmExt = doc.createExtension(VRMC_vrm);
           const meta   = vrmExt.createMetadata();
           meta.setTitle( titleInput.value  || 'MyAvatar' );
           meta.setAuthor( authorInput.value || 'Anonymous' );
-
-          // 3) バイナリ VRM を書き出し
           const vrmBytes = await io.writeBinary(doc);
-          
-          // ダウンロード
+
+          // 3) ダウンロード
           const blob = new Blob([vrmBytes], { type: 'application/octet-stream' });
           const url  = URL.createObjectURL(blob);
           const a    = document.createElement('a');
@@ -85,17 +74,5 @@
       );
     });
   </script>
-</head>
-<body>
-  <h1>FBX → VRM1.x Converter</h1>
-  <p>1. FBX ファイルを選択</p>
-  <input type="file" id="fbx-input" accept=".fbx" />
-
-  <p>2. メタデータを入力</p>
-  <label>タイトル: <input type="text" id="meta-title" value="MyAvatar" /></label>
-  <label>作者:   <input type="text" id="meta-author" value="Browser Converter" /></label>
-
-  <p>3. 変換スタート</p>
-  <button id="convert-btn">VRM に変換＆ダウンロード</button>
 </body>
 </html>
