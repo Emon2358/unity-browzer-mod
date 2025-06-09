@@ -1,79 +1,66 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download UnityPackage, Extract and Commit VRM
+name: Download, Extract (with unitypackage_extractor) and Commit
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # リポジトリへの書き込みを許可
+  contents: write
 
 jobs:
-  download-extract-commit:
+  extract-and-commit:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        persist-credentials: true
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-    - name: Download UnityPackage
-      id: download_pkg
-      run: |
-        URL="https://workupload.com/file/GYC875CeJw4"
-        echo "Downloading from $URL"
-        curl -L "$URL" -o downloaded.unitypackage
-        if [[ ! -s downloaded.unitypackage ]]; then
-          echo "Download failed or file empty"
-          exit 1
-        fi
-        echo "unity_pkg=downloaded.unitypackage" >> $GITHUB_OUTPUT
+      - name: Download UnityPackage 📦
+        id: download_pkg
+        run: |
+          URL="https://workupload.com/file/GYC875CeJw4"
+          echo "Downloading from $URL"
+          curl -L "$URL" -o downloaded.unitypackage
+          if [[ ! -s downloaded.unitypackage ]]; then
+            echo "❌ Download failed or file empty" >&2
+            exit 1
+          fi
 
-    - name: Ensure output directories
-      run: |
-        mkdir -p extracted
-        mkdir -p vrm-output
+      - name: Prepare clean directories
+        run: |
+          rm -rf extracted assets-output
+          mkdir -p extracted assets-output
 
-    - name: Install extraction tools
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y p7zip-full
+      - name: Install Python & unitypackage_extractor 🐍
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install unitypackage_extractor
 
-    - name: Extract UnityPackage
-      run: |
-        # .unitypackage は専用形式の圧縮アーカイブのため 7z で展開
-        7z x downloaded.unitypackage -oextracted > extraction.log
-        if [ $? -ne 0 ]; then
-          echo "Extraction failed. Check extraction.log for details."
-          exit 1
-        fi
+      - name: Extract with unitypackage_extractor
+        run: |
+          # output は assets-output/
+          python3 -m unitypackage_extractor downloaded.unitypackage assets-output
+          if [ $? -ne 0 ]; then
+            echo "❌ Extraction via unitypackage_extractor failed" >&2
+            exit 1
+          fi
 
-    - name: List extracted files
-      run: |
-        echo "## Files in UnityPackage:" 
-        find extracted -type f | tee extracted/files.txt
+      - name: List extracted files
+        run: |
+          echo "## Extracted Assets:"
+          find assets-output -type f | sed 's|^| - |'
 
-    - name: Find and Copy VRM files
-      id: copy_vrms
-      run: |
-        VRM_LIST=$(find extracted -type f -name '*.vrm')
-        if [[ -z "$VRM_LIST" ]]; then
-          echo "No VRM files found."
-          exit 0
-        fi
-        for F in $VRM_LIST; do
-          echo "Copying $F"
-          cp "$F" vrm-output/
-        done
-
-    - name: Commit extracted VRM
-      run: |
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add vrm-output/
-        if git diff --cached --quiet; then
-          echo "No VRM changes to commit"
-        else
-          git commit -m "Add/update extracted VRM files from downloaded.unitypackage"
-          git push
-        fi
+      - name: Commit & Push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets-output/
+          if git diff --cached --quiet; then
+            echo "✅ No changes, skipping commit"
+          else
+            git commit -m "Update assets from downloaded.unitypackage via unitypackage_extractor"
+            git push
+          fi
