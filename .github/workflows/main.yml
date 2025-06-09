@@ -19,11 +19,20 @@ jobs:
       - name: Obtain UnityPackage 📦
         id: obtain_pkg
         run: |
-          # 1) リポジトリ内に .unitypackage があればそれを採用
+          # リポジトリ内の .unitypackage を検索
           PKG=$(find . -type f -name '*.unitypackage' | head -n1 || true)
+
           if [[ -n "$PKG" ]]; then
             echo "✅ Found unitypackage in repo: $PKG"
-            cp "$PKG" Ctc001.unitypackage
+            # realpath で絶対パスを比較し、同一ファイルならコピーをスキップ
+            PKG_PATH=$(realpath "$PKG")
+            TARGET_PATH=$(realpath Ctc001.unitypackage 2>/dev/null || echo "")
+            if [[ "$PKG_PATH" != "$TARGET_PATH" ]]; then
+              cp "$PKG" Ctc001.unitypackage
+              echo "🔄 Copied to Ctc001.unitypackage"
+            else
+              echo "⏭️ Already Ctc001.unitypackage, skipping copy"
+            fi
           else
             echo "⏬ No unitypackage in repo; downloading from Workupload..."
             PAGE_URL="https://workupload.com/start/GYC875CeJw4"
@@ -36,7 +45,8 @@ jobs:
             echo "Direct URL: $DLURL"
             curl -fSL "$DLURL" -o Ctc001.unitypackage
           fi
-          # サイズ・MIMEタイプ・中身チェックは従来通り
+
+          # サイズ・MIMEタイプ・中身チェック
           echo "Downloaded size: $(du -h Ctc001.unitypackage | cut -f1)"
           echo "MIME type: $(file --mime-type -b Ctc001.unitypackage)"
           tar -tzf Ctc001.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
