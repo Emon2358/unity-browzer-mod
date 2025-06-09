@@ -5,123 +5,165 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FBX/UnityPackage → VRM Converter</title>
   <style>
-    body { margin: 0; font-family: sans-serif; }
-    #controls { position: fixed; top: 0; left: 0; background: rgba(255,255,255,0.9); padding: 10px; z-index: 10; max-width: 300px; }
+    body { margin: 0; font-family: sans-serif; overflow: hidden; }
+    #controls {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(255,255,255,0.9); padding: 10px; border-radius: 4px;
+      max-width: 280px; z-index: 10;
+    }
     #canvas { width: 100vw; height: 100vh; display: block; }
-    .slider { width: 100%; }
+    #fbxSelect { width: 100%; margin-top: 4px; }
+    #progress { width: 100%; height: 6px; background: #ddd; margin-top: 6px; border-radius: 3px; overflow: hidden; }
+    #progressBar { width: 0; height: 100%; background: #4caf50; }
+    button { margin-top: 6px; width: 100%; }
   </style>
 </head>
 <body>
   <div id="controls">
     <h3>ファイル入力</h3>
-    <input type="file" id="fileInput" accept=".fbx,.unitypackage" />
+    <input type="file" id="fileInput" accept=".fbx,.unitypackage" multiple />
+    <select id="fbxSelect" hidden></select>
+    <button id="loadBtn" disabled>読み込み</button>
     <button id="exportBtn" disabled>VRMとしてエクスポート</button>
-    <h3>設定</h3>
-    <div>
-      <label>揺れもの強度: <span id="springVal">0.5</span></label>
-      <input type="range" id="springSlider" class="slider" min="0" max="1" step="0.01" value="0.5" />
-    </div>
-    <div>
-      <label>ブレンドシェイプ: <span id="blendVal">0</span></label>
-      <input type="range" id="blendSlider" class="slider" min="0" max="1" step="0.01" value="0" />
-    </div>
+    <div id="progress" hidden><div id="progressBar"></div></div>
   </div>
   <canvas id="canvas"></canvas>
 
   <script type="module">
     import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
     import { FBXLoader } from 'https://unpkg.com/three@0.152.2/examples/jsm/loaders/FBXLoader.js';
-    import { VRM, VRMUtils, VRMExporter } from 'https://unpkg.com/@pixiv/three-vrm@1.4.0/dist/three-vrm.module.js';
+    import { OrbitControls } from 'https://unpkg.com/three@0.152.2/examples/jsm/controls/OrbitControls.js';
+    import {
+      VRM,
+      VRMUtils,
+      VRMExporter
+    } from 'https://unpkg.com/@pixiv/three-vrm@1.4.0/dist/three-vrm.module.js';
     import { Untar } from 'https://unpkg.com/untar@2.0.1/dist/untar.es.js';
 
-    let scene, camera, renderer, clock;
+    let scene, camera, renderer, clock, controls;
     let currentModel;
+    let fbxBuffers = [];
 
-    init();
-    function init() {
+    initScene();
+    animate();
+
+    function initScene() {
       const canvas = document.getElementById('canvas');
       renderer = new THREE.WebGLRenderer({canvas, antialias: true});
       renderer.setSize(window.innerWidth, window.innerHeight);
       scene = new THREE.Scene();
+
+      // 光源
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.6));
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(0, 5, 5);
+      scene.add(dirLight);
+
       camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 1.5, 3);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+
       clock = new THREE.Clock();
+      window.addEventListener('resize', onWindowResize);
+    }
 
-      const light = new THREE.HemisphereLight(0xffffff, 0x444444);
-      light.position.set(0, 2, 0);
-      scene.add(light);
-
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-
-      animate();
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
     function animate() {
       requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      if (currentModel && currentModel.update) currentModel.update(delta);
+      const dt = clock.getDelta();
+      if (currentModel && currentModel.update) currentModel.update(dt);
+      controls.update();
       renderer.render(scene, camera);
     }
 
-    document.getElementById('fileInput').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      let buffer = await file.arrayBuffer();
-      let fbxDataList = [];
+    //--- UI ロジック ---
+    const fileInput = document.getElementById('fileInput');
+    const fbxSelect = document.getElementById('fbxSelect');
+    const loadBtn   = document.getElementById('loadBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const progress  = document.getElementById('progress');
+    const progressBar = document.getElementById('progressBar');
 
-      if (file.name.endsWith('.unitypackage')) {
-        // .unitypackage は tar.gz 形式
-        // Untar が gz 自動検出するためそのまま利用
-        const files = await Untar(new Uint8Array(buffer));
-        for (const f of files) {
-          if (f.name.endsWith('.fbx')) {
-            fbxDataList.push(f.buffer);
+    fileInput.addEventListener('change', async e => {
+      fbxBuffers = [];
+      fbxSelect.innerHTML = '';
+      exportBtn.disabled = true;
+      const files = Array.from(e.target.files);
+      for (const file of files) {
+        const buf = await file.arrayBuffer();
+        if (file.name.endsWith('.unitypackage')) {
+          const items = await Untar(new Uint8Array(buf));
+          for (const item of items) {
+            if (item.name.endsWith('.fbx')) {
+              fbxBuffers.push({ name: item.name, buffer: item.buffer });
+            }
           }
+        } else if (file.name.endsWith('.fbx')) {
+          fbxBuffers.push({ name: file.name, buffer: buf });
         }
-      } else if (file.name.endsWith('.fbx')) {
-        fbxDataList.push(buffer);
       }
-      if (!fbxDataList.length) {
+      if (fbxBuffers.length === 0) {
         alert('FBX ファイルが見つかりませんでした');
+        loadBtn.disabled = true;
         return;
       }
-      // 最初の FBX を読み込む
+      // ドロップダウンに追加
+      fbxBuffers.forEach((f, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx; opt.text = f.name;
+        fbxSelect.appendChild(opt);
+      });
+      fbxSelect.hidden = false;
+      loadBtn.disabled = false;
+    });
+
+    loadBtn.addEventListener('click', async () => {
+      loadBtn.disabled = true;
+      progress.hidden = false;
+      progressBar.style.width = '0%';
+
+      // 選択中のFBXをロード
+      const sel = parseInt(fbxSelect.value);
+      const data = fbxBuffers[sel].buffer;
       const loader = new FBXLoader();
-      const fbx = loader.parse(fbxDataList[0]);
-      const vrm = await VRM.from(fbx);
+      loader.parse(data, '', async fbx => {
+        // VRM に変換
+        let vrm = await VRM.from(fbx);
+        // ボーン最適化
+        VRMUtils.removeUnnecessaryJoints(vrm.scene);
+        VRMUtils.optimize(vrm.scene);
 
-      if (currentModel) scene.remove(currentModel.scene);
-      currentModel = vrm;
-      scene.add(vrm.scene);
-      document.getElementById('exportBtn').disabled = false;
+        // モデル差し替え
+        if (currentModel) scene.remove(currentModel.scene);
+        currentModel = vrm;
+        scene.add(vrm.scene);
+        exportBtn.disabled = false;
+        progressBar.style.width = '100%';
+        setTimeout(() => progress.hidden = true, 500);
+      }, xhr => {
+        // プログレス更新
+        if (xhr.total) {
+          const pct = Math.min(100, (xhr.loaded / xhr.total * 100)).toFixed(0);
+          progressBar.style.width = pct + '%';
+        }
+      });
     });
 
-    document.getElementById('springSlider').addEventListener('input', (e) => {
-      const v = parseFloat(e.target.value);
-      document.getElementById('springVal').textContent = v.toFixed(2);
-      if (currentModel && currentModel.springBoneManager) {
-        currentModel.springBoneManager.springBoneGroups.forEach(grp => grp.stiffness = v);
-      }
-    });
-    document.getElementById('blendSlider').addEventListener('input', (e) => {
-      const v = parseFloat(e.target.value);
-      document.getElementById('blendVal').textContent = v.toFixed(2);
-      if (currentModel && currentModel.blendShapeProxy) {
-        currentModel.blendShapeProxy.setValue(THREE.VRMBlendShapePresetName.Neutral, v);
-      }
-    });
-
-    document.getElementById('exportBtn').addEventListener('click', () => {
+    // VRM出力
+    exportBtn.addEventListener('click', () => {
       const exporter = new VRMExporter();
-      exporter.parse(currentModel.scene).then((buffer) => {
+      exporter.parse(currentModel.scene).then(buffer => {
         const blob = new Blob([buffer], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
         a.download = 'model.vrm';
         a.click();
       });
