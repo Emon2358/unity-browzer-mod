@@ -71,8 +71,7 @@ jobs:
           lwa_unity_unpack \
             --input Ctc001.unitypackage \
             --output assets-output \
-            --copy-meta-files \
-            --verbose
+            --copy-meta-files
           echo "✅ Extraction succeeded"
 
       - name: List extracted files
