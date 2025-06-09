@@ -23,8 +23,8 @@ jobs:
         URL="https://workupload.com/file/GYC875CeJw4"
         echo "Downloading from $URL"
         curl -L "$URL" -o downloaded.unitypackage
-        if [[ ! -f downloaded.unitypackage ]]; then
-          echo "Download failed"
+        if [[ ! -s downloaded.unitypackage ]]; then
+          echo "Download failed or file empty"
           exit 1
         fi
         echo "unity_pkg=downloaded.unitypackage" >> $GITHUB_OUTPUT
@@ -34,10 +34,19 @@ jobs:
         mkdir -p extracted
         mkdir -p vrm-output
 
+    - name: Install extraction tools
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y p7zip-full
+
     - name: Extract UnityPackage
       run: |
-        # .unitypackage は単純な tar アーカイブのため、-z オプションを外す
-        tar -xvf downloaded.unitypackage -C extracted
+        # .unitypackage は専用形式の圧縮アーカイブのため 7z で展開
+        7z x downloaded.unitypackage -oextracted > extraction.log
+        if [ $? -ne 0 ]; then
+          echo "Extraction failed. Check extraction.log for details."
+          exit 1
+        fi
 
     - name: List extracted files
       run: |
