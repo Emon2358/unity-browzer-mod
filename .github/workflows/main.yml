@@ -21,18 +21,18 @@ jobs:
         with:
           toolchain: stable
           override: true
-          components: rustfmt  # 必要に応じて追加コンポーネントを指定
 
       - name: Download UnityPackage 📦
         id: download_pkg
         run: |
           URL="https://workupload.com/file/GYC875CeJw4"
           echo "Downloading from $URL"
-          curl -fSLo downloaded.unitypackage "$URL"
-          echo "Downloaded size: $(du -h downloaded.unitypackage | cut -f1)"
-          echo "MIME type: $(file --mime-type -b downloaded.unitypackage)"
-          # 簡易的な中身確認 (.unitypackage は gzip 圧縮された tar なので tar -tzf で確認可)
-          tar -tzf downloaded.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
+          # 保存名を Ctc001.unitypackage に変更
+          curl -fSLo Ctc001.unitypackage "$URL"
+          echo "Downloaded size: $(du -h Ctc001.unitypackage | cut -f1)"
+          echo "MIME type: $(file --mime-type -b Ctc001.unitypackage)"
+          # .unitypackage は tar.gz 形式なので中身確認
+          tar -tzf Ctc001.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
 
       - name: Prepare clean output directory
         run: |
@@ -46,7 +46,7 @@ jobs:
       - name: Extract .unitypackage → assets-output
         run: |
           lwa_unity_unpack \
-            --input downloaded.unitypackage \
+            --input Ctc001.unitypackage \
             --output assets-output \
             --copy-meta-files \
             --verbose
@@ -65,6 +65,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "✅ No changes to commit"
           else
-            git commit -m "Update assets from downloaded.unitypackage"
+            git commit -m "Update assets from Ctc001.unitypackage"
             git push
           fi
