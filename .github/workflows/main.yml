@@ -1,5 +1,5 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract (with unitypackage_extractor) and Commit
+name: Download, Extract and Commit UnityPackage
 
 on:
   workflow_dispatch:
@@ -33,18 +33,36 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Python & unitypackage_extractor 🐍
+      - name: Install Python
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y python3-pip
-          pip3 install unitypackage_extractor
+          sudo apt-get install -y python3 python3-pip
 
-      - name: Extract with unitypackage_extractor
+      - name: Extract with Python script 🐍
         run: |
-          # output は assets-output/
-          python3 -m unitypackage_extractor downloaded.unitypackage assets-output
+          python3 - << 'EOF'
+          import tarfile, os, shutil
+
+          pkg = 'downloaded.unitypackage'
+          # 1) 圧縮／非圧縮いずれでも開けるようにトライ
+          try:
+              tf = tarfile.open(pkg, mode='r:*')
+          except tarfile.ReadError:
+              tf = tarfile.open(pkg, mode='r:')
+          tf.extractall('extracted')
+          tf.close()
+
+          # 2) GUID フォルダ毎に pathname を読んで assets-output に配置
+          for root, dirs, files in os.walk('extracted'):
+              if 'pathname' in files and 'asset' in files:
+                  rel = open(os.path.join(root, 'pathname'), encoding='utf-8').read().strip()
+                  src = os.path.join(root, 'asset')
+                  dst = os.path.join('assets-output', rel)
+                  os.makedirs(os.path.dirname(dst), exist_ok=True)
+                  shutil.copy(src, dst)
+          EOF
           if [ $? -ne 0 ]; then
-            echo "❌ Extraction via unitypackage_extractor failed" >&2
+            echo "❌ Python extraction failed" >&2
             exit 1
           fi
 
@@ -61,6 +79,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "✅ No changes, skipping commit"
           else
-            git commit -m "Update assets from downloaded.unitypackage via unitypackage_extractor"
+            git commit -m "Update assets from downloaded.unitypackage"
             git push
           fi
