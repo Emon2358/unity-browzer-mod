@@ -1,11 +1,11 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract (with unitypackage_extractor) and Commit
+name: Download, Extract (with unar) and Commit
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write  # リポジトリへの書き込み
 
 jobs:
   extract-and-commit:
@@ -29,17 +29,38 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Python & unitypackage_extractor 🐍
+      - name: Install unar & Python 🛠️
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y python3-pip
-          pip3 install unitypackage_extractor
+          sudo apt-get install -y unar python3 python3-pip
 
-      - name: Extract with unitypackage_extractor 🔧
+      - name: Extract with unar 🚀
         run: |
-          python3 -m unitypackage_extractor.extractor downloaded.unitypackage assets-output
+          # The Unarchiver CLI can autodetect and unpack .unitypackage
+          unar -force-overwrite -output extracted downloaded.unitypackage
           if [ $? -ne 0 ]; then
-            echo "❌ Extraction failed via unitypackage_extractor" >&2
+            echo "❌ unar extraction failed" >&2
+            exit 1
+          fi
+
+      - name: Reconstruct original asset paths with Python 🐍
+        run: |
+          python3 - << 'EOF'
+          import os, shutil
+
+          # extracted/[GUID]/asset と pathname を結びつけ
+          for guid_dir in os.listdir('extracted'):
+              root = os.path.join('extracted', guid_dir)
+              asset = os.path.join(root, 'asset')
+              pathfile = os.path.join(root, 'pathname')
+              if os.path.isfile(asset) and os.path.isfile(pathfile):
+                  rel = open(pathfile, encoding='utf-8').read().strip()
+                  dst = os.path.join('assets-output', rel)
+                  os.makedirs(os.path.dirname(dst), exist_ok=True)
+                  shutil.copy(asset, dst)
+          EOF
+          if [ $? -ne 0 ]; then
+            echo "❌ Python reconstruction failed" >&2
             exit 1
           fi
 
@@ -47,7 +68,7 @@ jobs:
         run: |
           COUNT=$(find assets-output -type f | wc -l)
           echo "Extracted $COUNT file(s)."
-          if [[ "$COUNT" -eq 0 ]]; then
+          if [ "$COUNT" -eq 0 ]; then
             echo "❌ No files extracted. Check the package." >&2
             exit 1
           fi
