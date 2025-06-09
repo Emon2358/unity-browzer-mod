@@ -1,5 +1,5 @@
 # .github/workflows/extract-unitypackage.yml
-name: Extract UnityPackage and Commit VRM
+name: Download UnityPackage, Extract and Commit VRM
 
 on:
   workflow_dispatch:
@@ -8,24 +8,26 @@ permissions:
   contents: write  # リポジトリへの書き込みを許可
 
 jobs:
-  extract-and-commit:
+  download-extract-commit:
     runs-on: ubuntu-latest
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
-        persist-credentials: true  # Git push を許可
+        persist-credentials: true
 
-    - name: Locate UnityPackage
-      id: locate_pkg
+    - name: Download UnityPackage
+      id: download_pkg
       run: |
-        PKG_PATH=$(find . -maxdepth 3 -type f -name '*.unitypackage' | head -n 1)
-        if [[ -z "$PKG_PATH" ]]; then
-          echo "No .unitypackage found in repo."
+        URL="https://workupload.com/file/GYC875CeJw4"
+        echo "Downloading from $URL"
+        curl -L "$URL" -o downloaded.unitypackage
+        if [[ ! -f downloaded.unitypackage ]]; then
+          echo "Download failed"
           exit 1
         fi
-        echo "unity_pkg=$PKG_PATH" >> $GITHUB_OUTPUT
+        echo "unity_pkg=downloaded.unitypackage" >> $GITHUB_OUTPUT
 
     - name: Ensure output directories
       run: |
@@ -34,7 +36,7 @@ jobs:
 
     - name: Extract UnityPackage
       run: |
-        tar -xzvf "${{ steps.locate_pkg.outputs.unity_pkg }}" -C extracted
+        tar -xzvf "downloaded.unitypackage" -C extracted
 
     - name: Find and Copy VRM files
       id: copy_vrms
@@ -57,6 +59,6 @@ jobs:
         if git diff --cached --quiet; then
           echo "No VRM changes to commit"
         else
-          git commit -m "Add/update extracted VRM files from ${{ steps.locate_pkg.outputs.unity_pkg }}"
+          git commit -m "Add/update extracted VRM files from downloaded.unitypackage"
           git push
         fi
