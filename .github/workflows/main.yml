@@ -1,0 +1,62 @@
+# .github/workflows/extract-unitypackage.yml
+name: Extract UnityPackage and Commit VRM
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # リポジトリへの書き込みを許可
+
+jobs:
+  extract-and-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: true  # Git push を許可
+
+    - name: Locate UnityPackage
+      id: locate_pkg
+      run: |
+        PKG_PATH=$(find . -maxdepth 3 -type f -name '*.unitypackage' | head -n 1)
+        if [[ -z "$PKG_PATH" ]]; then
+          echo "No .unitypackage found in repo."
+          exit 1
+        fi
+        echo "unity_pkg=$PKG_PATH" >> $GITHUB_OUTPUT
+
+    - name: Ensure output directories
+      run: |
+        mkdir -p extracted
+        mkdir -p vrm-output
+
+    - name: Extract UnityPackage
+      run: |
+        tar -xzvf "${{ steps.locate_pkg.outputs.unity_pkg }}" -C extracted
+
+    - name: Find and Copy VRM files
+      id: copy_vrms
+      run: |
+        VRM_LIST=$(find extracted -type f -name '*.vrm')
+        if [[ -z "$VRM_LIST" ]]; then
+          echo "No VRM files found."
+          exit 0
+        fi
+        for F in $VRM_LIST; do
+          echo "Copying $F"
+          cp "$F" vrm-output/
+        done
+
+    - name: Commit extracted VRM
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add vrm-output/
+        if git diff --cached --quiet; then
+          echo "No VRM changes to commit"
+        else
+          git commit -m "Add/update extracted VRM files from ${{ steps.locate_pkg.outputs.unity_pkg }}"
+          git push
+        fi
