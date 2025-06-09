@@ -16,43 +16,41 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Setup Rust toolchain 🦀
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-
-      - name: Resolve direct download URL 📥
-        id: resolve
+      - name: Obtain UnityPackage 📦
+        id: obtain_pkg
         run: |
-          PAGE_URL="https://workupload.com/start/GYC875CeJw4"
-          echo "Fetching download page..."
-          # HTML を取得して一時保存
-          curl -fsL "$PAGE_URL" -o page.html
-          # dlNN.workupload.com 形式の真リンクを抜き出し
-          DLURL=$(grep -Po 'https://dl[0-9]+\.workupload\.com/[^"]+\.unitypackage' page.html | head -n1)
-          if [[ -z "$DLURL" ]]; then
-            echo "❌ Could not find direct download URL" >&2
-            exit 1
+          # 1) リポジトリ内に .unitypackage があればそれを採用
+          PKG=$(find . -type f -name '*.unitypackage' | head -n1 || true)
+          if [[ -n "$PKG" ]]; then
+            echo "✅ Found unitypackage in repo: $PKG"
+            cp "$PKG" Ctc001.unitypackage
+          else
+            echo "⏬ No unitypackage in repo; downloading from Workupload..."
+            PAGE_URL="https://workupload.com/start/GYC875CeJw4"
+            curl -fsL "$PAGE_URL" -o page.html
+            DLURL=$(grep -Po 'https://dl[0-9]+\.workupload\.com/[^"]+\.unitypackage' page.html | head -n1)
+            if [[ -z "$DLURL" ]]; then
+              echo "❌ Could not find direct download URL" >&2
+              exit 1
+            fi
+            echo "Direct URL: $DLURL"
+            curl -fSL "$DLURL" -o Ctc001.unitypackage
           fi
-          echo "Direct URL: $DLURL"
-          echo "::set-output name=dlurl::$DLURL"
-
-      - name: Download UnityPackage 📦
-        id: download_pkg
-        run: |
-          DLURL="${{ steps.resolve.outputs.dlurl }}"
-          echo "Downloading from $DLURL"
-          curl -fSL "$DLURL" -o Ctc001.unitypackage
+          # サイズ・MIMEタイプ・中身チェックは従来通り
           echo "Downloaded size: $(du -h Ctc001.unitypackage | cut -f1)"
           echo "MIME type: $(file --mime-type -b Ctc001.unitypackage)"
-          # 中身チェック（gzip 圧縮 tar 形式）
           tar -tzf Ctc001.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
 
       - name: Prepare clean output directory
         run: |
           rm -rf assets-output
           mkdir -p assets-output
+
+      - name: Setup Rust toolchain 🦀
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
       - name: Install lwa_unity_unpack via cargo
         run: |
