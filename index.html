@@ -2,75 +2,87 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>FBX → VRM1.x Converter (Browser)</title>
+  <title>FBX → VRM1.x Converter (Browser + glTF-Transform)</title>
 
-  <!-- importmap でモジュールの解決先を指定 -->
+  <!-- importmap で依存関係を解決 -->
   <script type="importmap">
   {
     "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js",
       "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/",
-      "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.4.1/lib/three-vrm.module.min.js"
+      // glTF-Transform のブラウザビルド
+      "@gltf-transform/core": "https://cdn.jsdelivr.net/npm/@gltf-transform/core@3.21.0/dist/gltf-transform-core.browser.esm.js",
+      "@gltf-transform/extensions": "https://cdn.jsdelivr.net/npm/@gltf-transform/extensions@3.21.0/dist/extensions.browser.esm.js"
     }
   }
   </script>
 
   <script type="module">
-    import * as THREE           from 'three';
-    import { FBXLoader }        from 'three/addons/loaders/FBXLoader.js';
-    import { GLTFExporter }     from 'three/addons/exporters/GLTFExporter.js';
-    import { VRMExporter }      from '@pixiv/three-vrm';
+    import * as THREE        from 'three';
+    import { FBXLoader }     from 'three/addons/loaders/FBXLoader.js';
+    import { GLTFExporter }  from 'three/addons/exporters/GLTFExporter.js';
+    import { WebIO }         from '@gltf-transform/core';
+    import { VRMC_vrm }      from '@gltf-transform/extensions';
 
-    window.addEventListener('DOMContentLoaded', () => {
-      const fbxInput    = document.getElementById('fbx-input');
-      const titleInput  = document.getElementById('meta-title');
-      const authorInput = document.getElementById('meta-author');
-      const convertBtn  = document.getElementById('convert-btn');
+    const fbxInput    = document.getElementById('fbx-input');
+    const titleInput  = document.getElementById('meta-title');
+    const authorInput = document.getElementById('meta-author');
+    const convertBtn  = document.getElementById('convert-btn');
 
-      let loadedScene = null;
+    let fbxScene = null;
+    fbxInput.addEventListener('change', async (evt) => {
+      const file = evt.target.files[0];
+      const array = await file.arrayBuffer();
+      fbxScene = new FBXLoader().parse(array, '');
+      alert(`FBX loaded: ${file.name}`);
+    });
 
-      // 1) FBX を読み込む
-      fbxInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const array = await file.arrayBuffer();
-        const loader = new FBXLoader();
-        loadedScene = loader.parse(array, '');
-        alert(`FBX loaded: ${file.name}`);
-      });
+    convertBtn.addEventListener('click', () => {
+      if (!fbxScene) {
+        alert('まず FBX をアップロードしてください');
+        return;
+      }
 
-      // 2) 変換＆ダウンロード
-      convertBtn.addEventListener('click', async () => {
-        if (!loadedScene) {
-          alert('まず FBX をアップロードしてください');
-          return;
-        }
+      // 1) GLB に変換
+      const exporter = new GLTFExporter();
+      exporter.parse(
+        fbxScene,
+        async (result) => {
+          // result は { binary: ArrayBuffer, ... }
+          const glbBytes = new Uint8Array(result.binary);
 
-        // glTF（GLB）に変換
-        const gltfExporter = new GLTFExporter();
-        gltfExporter.parse(
-          loadedScene,
-          async (gltf) => {
-            // VRM1.x に変換（メタデータ埋め込み）
-            const vrmArray = await VRMExporter.parse(gltf, {
-              title:  titleInput.value  || 'MyAvatar',
-              author: authorInput.value || 'Anonymous',
+          // 2) glTF-Transform で VRM1.x + metadata を埋め込む
+          const io = new WebIO()
+            .registerExtensions([ VRMC_vrm ])
+            .registerDependencies({
+              // VRMC_vrm は依存なし
             });
 
-            // ダウンロード
-            const blob = new Blob([vrmArray], { type: 'application/octet-stream' });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `${titleInput.value || 'avatar'}.vrm`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          },
-          { binary: true }
-        );
-      });
+          // ドキュメントを読み込み
+          const doc = await io.readBinary(glbBytes);
+
+          // VRMC_vrm 拡張を作成してメタを埋め込む
+          const vrmExt = doc.createExtension(VRMC_vrm);
+          const meta   = vrmExt.createMetadata();
+          meta.setTitle( titleInput.value  || 'MyAvatar' );
+          meta.setAuthor( authorInput.value || 'Anonymous' );
+
+          // 3) バイナリ VRM を書き出し
+          const vrmBytes = await io.writeBinary(doc);
+          
+          // ダウンロード
+          const blob = new Blob([vrmBytes], { type: 'application/octet-stream' });
+          const url  = URL.createObjectURL(blob);
+          const a    = document.createElement('a');
+          a.href     = url;
+          a.download = `${titleInput.value || 'avatar'}.vrm`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        },
+        { binary: true }
+      );
     });
   </script>
 </head>
@@ -80,14 +92,8 @@
   <input type="file" id="fbx-input" accept=".fbx" />
 
   <p>2. メタデータを入力</p>
-  <label>
-    タイトル:
-    <input type="text" id="meta-title" value="MyAvatar" />
-  </label>
-  <label>
-    作者:
-    <input type="text" id="meta-author" value="Browser Converter" />
-  </label>
+  <label>タイトル: <input type="text" id="meta-title" value="MyAvatar" /></label>
+  <label>作者:   <input type="text" id="meta-author" value="Browser Converter" /></label>
 
   <p>3. 変換スタート</p>
   <button id="convert-btn">VRM に変換＆ダウンロード</button>
