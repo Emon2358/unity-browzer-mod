@@ -1,11 +1,11 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract and Commit UnityPackage
+name: Download, Extract (with unity-unpacker) and Commit
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write  # リポジトリへの書き込み
 
 jobs:
   extract-and-commit:
@@ -30,36 +30,29 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install extraction tools & Python 🛠️
+      - name: Install Rust & unity-unpacker 🦀
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y libarchive-tools python3 python3-pip
+          # Rustup（非対話）でインストール
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          # unity-unpacker をインストール
+          cargo install unity-unpacker
 
-      - name: Extract with bsdtar 🔧
+      - name: Extract with unity-unpacker 🔧
         run: |
-          # bsdtar は libarchive ツール。UnityPackage (.tar.gz) の展開に強い
-          bsdtar -xvf downloaded.unitypackage -C extracted
-          if [ $? -ne 0 ]; then
-            echo "❌ bsdtar extraction failed" >&2
+          # unity-unpacker は内部で一度 temp に展開 → pathname をもとに再構築
+          unity-unpacker downloaded.unitypackage assets-output -v
+          if [[ $? -ne 0 ]]; then
+            echo "❌ unity-unpacker extraction failed" >&2
             exit 1
           fi
 
-      - name: Reconstruct original asset paths with Python 🐍
+      - name: Verify extraction
         run: |
-          python3 - << 'EOF'
-          import os, shutil
-
-          # extracted/[GUID]/asset  と  extracted/[GUID]/pathname を結びつけ
-          for root, dirs, files in os.walk('extracted'):
-              if 'asset' in files and 'pathname' in files:
-                  src = os.path.join(root, 'asset')
-                  rel = open(os.path.join(root, 'pathname'), encoding='utf-8').read().strip()
-                  dst = os.path.join('assets-output', rel)
-                  os.makedirs(os.path.dirname(dst), exist_ok=True)
-                  shutil.copy(src, dst)
-          EOF
-          if [ $? -ne 0 ]; then
-            echo "❌ Python reconstruction failed" >&2
+          COUNT=$(find assets-output -type f | wc -l)
+          echo "Extracted $COUNT file(s)."
+          if [[ "$COUNT" -eq 0 ]]; then
+            echo "❌ No files extracted. Check the package or URL." >&2
             exit 1
           fi
 
