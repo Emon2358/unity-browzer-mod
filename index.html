@@ -6,6 +6,7 @@
 </head>
 <body>
   <h1>FBX → VRM1.x Converter</h1>
+
   <p>1. FBX ファイルを選択</p>
   <input type="file" id="fbx-input" accept=".fbx" />
 
@@ -17,11 +18,12 @@
   <button id="convert-btn">VRM に変換＆ダウンロード</button>
 
   <script type="module">
+    // Three.js 本体とアドオンを CDN から直接読み込み
     import * as THREE       from 'https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.js';
     import { FBXLoader }    from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/loaders/FBXLoader.js';
     import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/exporters/GLTFExporter.js';
 
-    // Use esm.sh to get browser-ready ESM for glTF-Transform
+    // glTF-Transform を esm.sh 経由で読み込み
     import { WebIO }    from 'https://esm.sh/@gltf-transform/core@4.1.4';
     import { VRMC_vrm } from 'https://esm.sh/@gltf-transform/extensions@4.1.4';
 
@@ -31,6 +33,8 @@
     const convertBtn  = document.getElementById('convert-btn');
 
     let fbxScene = null;
+
+    // FBX の読み込み
     fbxInput.addEventListener('change', async (evt) => {
       const file = evt.target.files[0];
       if (!file) return;
@@ -39,25 +43,28 @@
       alert(`FBX loaded: ${file.name}`);
     });
 
+    // 変換＆ダウンロード処理
     convertBtn.addEventListener('click', () => {
       if (!fbxScene) {
         alert('まず FBX をアップロードしてください');
         return;
       }
 
-      // 1) Three.js で GLB 化
+      // 1) Three.js で GLB に変換
       new GLTFExporter().parse(
         fbxScene,
         async (result) => {
           const glbBytes = new Uint8Array(result.binary);
 
-          // 2) glTF-Transform (browser build via esm.sh) で VRM + メタデータ埋め込み
+          // 2) glTF-Transform (browser build) で VRM1.x + メタデータ
           const io  = new WebIO().registerExtensions([VRMC_vrm]);
           const doc = await io.readBinary(glbBytes);
+
           const vrmExt = doc.createExtension(VRMC_vrm);
           const meta   = vrmExt.createMetadata();
           meta.setTitle( titleInput.value  || 'MyAvatar' );
           meta.setAuthor( authorInput.value || 'Anonymous' );
+
           const vrmBytes = await io.writeBinary(doc);
 
           // 3) ダウンロード
