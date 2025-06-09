@@ -1,5 +1,5 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract and Commit UnityPackage
+name: Download, Extract (with lwa_unity_unpack) and Commit
 
 on:
   workflow_dispatch:
@@ -21,50 +21,30 @@ jobs:
         id: download_pkg
         run: |
           URL="https://workupload.com/file/GYC875CeJw4"
-          echo "Downloading from $URL"
           curl -L "$URL" -o downloaded.unitypackage
-          if [[ ! -s downloaded.unitypackage ]]; then
-            echo "❌ Download failed or file empty" >&2
-            exit 1
-          fi
+          [[ -s downloaded.unitypackage ]] || { echo "❌ Download failed or empty" >&2; exit 1; }
 
       - name: Prepare clean directories
         run: |
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Python
+      - name: Install Rust & lwa_unity_unpack 🦀
         run: |
-          sudo apt-get update -y
-          sudo apt-get install -y python3 python3-pip
+          # Rust toolchain のインストール
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          # CLI ツールをビルド＆インストール
+          cargo install lwa_unity_unpack
 
-      - name: Extract with Python script 🐍
+      - name: Extract .unitypackage → assets-output
         run: |
-          python3 - << 'EOF'
-          import tarfile, os, shutil
-
-          pkg = 'downloaded.unitypackage'
-          # 1) 圧縮／非圧縮いずれでも開けるようにトライ
-          try:
-              tf = tarfile.open(pkg, mode='r:*')
-          except tarfile.ReadError:
-              tf = tarfile.open(pkg, mode='r:')
-          tf.extractall('extracted')
-          tf.close()
-
-          # 2) GUID フォルダ毎に pathname を読んで assets-output に配置
-          for root, dirs, files in os.walk('extracted'):
-              if 'pathname' in files and 'asset' in files:
-                  rel = open(os.path.join(root, 'pathname'), encoding='utf-8').read().strip()
-                  src = os.path.join(root, 'asset')
-                  dst = os.path.join('assets-output', rel)
-                  os.makedirs(os.path.dirname(dst), exist_ok=True)
-                  shutil.copy(src, dst)
-          EOF
-          if [ $? -ne 0 ]; then
-            echo "❌ Python extraction failed" >&2
-            exit 1
-          fi
+          # --copy-meta-files を付けると .meta も一緒にコピーできます
+          lwa_unity_unpack \
+            --input downloaded.unitypackage \
+            --output assets-output \
+            --copy-meta-files
+          [[ $? -eq 0 ]] || { echo "❌ Extraction failed" >&2; exit 1; }
 
       - name: List extracted files
         run: |
@@ -77,7 +57,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add assets-output/
           if git diff --cached --quiet; then
-            echo "✅ No changes, skipping commit"
+            echo "✅ No changes to commit"
           else
             git commit -m "Update assets from downloaded.unitypackage"
             git push
