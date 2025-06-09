@@ -1,11 +1,11 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract (with @natsuneko-laboratory/unitypackage) and Commit
+name: Download, Extract (with unitypackage_extractor) and Commit
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # リポジトリへの書き込み
+  contents: write
 
 jobs:
   extract-and-commit:
@@ -21,7 +21,6 @@ jobs:
         id: download_pkg
         run: |
           URL="https://workupload.com/file/GYC875CeJw4"
-          echo "Downloading from $URL"
           curl --fail --retry 3 -L "$URL" -o downloaded.unitypackage
           [[ -s downloaded.unitypackage ]] || { echo "❌ Download failed or empty" >&2; exit 1; }
 
@@ -30,27 +29,26 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Node.js & Library 🟢
+      - name: Install Python & unitypackage_extractor 🐍
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y nodejs npm
-          npm install @natsuneko-laboratory/unitypackage
+          sudo apt-get install -y python3-pip
+          pip3 install unitypackage_extractor
 
-      - name: Extract with @natsuneko-laboratory/unitypackage 🚀
+      - name: Extract with unitypackage_extractor 🔧
         run: |
-          node -e "
-            const { extract } = require('@natsuneko-laboratory/unitypackage');
-            extract('downloaded.unitypackage','assets-output')
-              .then(() => console.log('✅ Extraction complete'))
-              .catch(err => { console.error('❌ Extraction failed:', err); process.exit(1); });
-          "
+          python3 -m unitypackage_extractor.extractor downloaded.unitypackage assets-output
+          if [ $? -ne 0 ]; then
+            echo "❌ Extraction failed via unitypackage_extractor" >&2
+            exit 1
+          fi
 
       - name: Verify extraction
         run: |
           COUNT=$(find assets-output -type f | wc -l)
           echo "Extracted $COUNT file(s)."
           if [[ "$COUNT" -eq 0 ]]; then
-            echo "❌ No files extracted. Check the package or URL." >&2
+            echo "❌ No files extracted. Check the package." >&2
             exit 1
           fi
 
