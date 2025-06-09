@@ -36,7 +36,13 @@ jobs:
 
     - name: Extract UnityPackage
       run: |
-        tar -xzvf "downloaded.unitypackage" -C extracted
+        # .unitypackage は単純な tar アーカイブのため、-z オプションを外す
+        tar -xvf downloaded.unitypackage -C extracted
+
+    - name: List extracted files
+      run: |
+        echo "## Files in UnityPackage:" 
+        find extracted -type f | tee extracted/files.txt
 
     - name: Find and Copy VRM files
       id: copy_vrms
