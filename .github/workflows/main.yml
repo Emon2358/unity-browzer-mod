@@ -1,5 +1,5 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract (with lwa_unity_unpack) and Commit
+name: Download, Extract and Commit UnityPackage
 
 on:
   workflow_dispatch:
@@ -21,7 +21,8 @@ jobs:
         id: download_pkg
         run: |
           URL="https://workupload.com/file/GYC875CeJw4"
-          curl -L "$URL" -o downloaded.unitypackage
+          echo "Downloading from $URL"
+          curl --fail --retry 3 -L "$URL" -o downloaded.unitypackage
           [[ -s downloaded.unitypackage ]] || { echo "❌ Download failed or empty" >&2; exit 1; }
 
       - name: Prepare clean directories
@@ -29,22 +30,38 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Rust & lwa_unity_unpack 🦀
+      - name: Install extraction tools & Python 🛠️
         run: |
-          # Rust toolchain のインストール
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
-          # CLI ツールをビルド＆インストール
-          cargo install lwa_unity_unpack
+          sudo apt-get update -y
+          sudo apt-get install -y libarchive-tools python3 python3-pip
 
-      - name: Extract .unitypackage → assets-output
+      - name: Extract with bsdtar 🔧
         run: |
-          # --copy-meta-files を付けると .meta も一緒にコピーできます
-          lwa_unity_unpack \
-            --input downloaded.unitypackage \
-            --output assets-output \
-            --copy-meta-files
-          [[ $? -eq 0 ]] || { echo "❌ Extraction failed" >&2; exit 1; }
+          # bsdtar は libarchive ツール。UnityPackage (.tar.gz) の展開に強い
+          bsdtar -xvf downloaded.unitypackage -C extracted
+          if [ $? -ne 0 ]; then
+            echo "❌ bsdtar extraction failed" >&2
+            exit 1
+          fi
+
+      - name: Reconstruct original asset paths with Python 🐍
+        run: |
+          python3 - << 'EOF'
+          import os, shutil
+
+          # extracted/[GUID]/asset  と  extracted/[GUID]/pathname を結びつけ
+          for root, dirs, files in os.walk('extracted'):
+              if 'asset' in files and 'pathname' in files:
+                  src = os.path.join(root, 'asset')
+                  rel = open(os.path.join(root, 'pathname'), encoding='utf-8').read().strip()
+                  dst = os.path.join('assets-output', rel)
+                  os.makedirs(os.path.dirname(dst), exist_ok=True)
+                  shutil.copy(src, dst)
+          EOF
+          if [ $? -ne 0 ]; then
+            echo "❌ Python reconstruction failed" >&2
+            exit 1
+          fi
 
       - name: List extracted files
         run: |
