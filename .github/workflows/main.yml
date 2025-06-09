@@ -1,5 +1,5 @@
 # .github/workflows/extract-unitypackage.yml
-name: Download, Extract (with unity-unpacker) and Commit
+name: Download, Extract (with @natsuneko-laboratory/unitypackage) and Commit
 
 on:
   workflow_dispatch:
@@ -30,22 +30,20 @@ jobs:
           rm -rf extracted assets-output
           mkdir -p extracted assets-output
 
-      - name: Install Rust & unity-unpacker 🦀
+      - name: Install Node.js & Library 🟢
         run: |
-          # Rustup（非対話）でインストール
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
-          # unity-unpacker をインストール
-          cargo install unity-unpacker
+          sudo apt-get update -y
+          sudo apt-get install -y nodejs npm
+          npm install @natsuneko-laboratory/unitypackage
 
-      - name: Extract with unity-unpacker 🔧
+      - name: Extract with @natsuneko-laboratory/unitypackage 🚀
         run: |
-          # unity-unpacker は内部で一度 temp に展開 → pathname をもとに再構築
-          unity-unpacker downloaded.unitypackage assets-output -v
-          if [[ $? -ne 0 ]]; then
-            echo "❌ unity-unpacker extraction failed" >&2
-            exit 1
-          fi
+          node -e "
+            const { extract } = require('@natsuneko-laboratory/unitypackage');
+            extract('downloaded.unitypackage','assets-output')
+              .then(() => console.log('✅ Extraction complete'))
+              .catch(err => { console.error('❌ Extraction failed:', err); process.exit(1); });
+          "
 
       - name: Verify extraction
         run: |
