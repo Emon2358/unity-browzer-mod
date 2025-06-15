@@ -1,4 +1,4 @@
-name: Download, Extract (with lwa_unity_unpack) and Commit
+name: Download, Extract 幾寱.unitypackage and Commit
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Obtain UnityPackage 📦
+      - name: Obtain 幾寱.unitypackage 📦
         id: obtain_pkg
         run: |
           # リポジトリ内の .unitypackage を検索
@@ -66,7 +66,7 @@ jobs:
         run: |
           cargo install lwa_unity_unpack --force
 
-      - name: Extract .unitypackage → assets-output
+      - name: Extract 幾寱.unitypackage → assets-output
         run: |
           lwa_unity_unpack \
             --input 幾寱.unitypackage \
@@ -87,6 +87,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "✅ No changes to commit"
           else
-            git commit -m "Update assets from Ctc001.unitypackage"
+            git commit -m "Update assets from 幾寱.unitypackage"
             git push
           fi
