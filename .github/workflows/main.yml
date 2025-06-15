@@ -26,12 +26,12 @@ jobs:
             echo "✅ Found unitypackage in repo: $PKG"
             # realpath で絶対パスを比較し、同一ファイルならコピーをスキップ
             PKG_PATH=$(realpath "$PKG")
-            TARGET_PATH=$(realpath Ctc001.unitypackage 2>/dev/null || echo "")
+            TARGET_PATH=$(realpath 幾寱.unitypackage 2>/dev/null || echo "")
             if [[ "$PKG_PATH" != "$TARGET_PATH" ]]; then
-              cp "$PKG" Ctc001.unitypackage
-              echo "🔄 Copied to Ctc001.unitypackage"
+              cp "$PKG" 幾寱.unitypackage
+              echo "🔄 Copied to 幾寱.unitypackage"
             else
-              echo "⏭️ Already Ctc001.unitypackage, skipping copy"
+              echo "⏭️ Already 幾寱.unitypackage, skipping copy"
             fi
           else
             echo "⏬ No unitypackage in repo; downloading from Workupload..."
@@ -43,13 +43,13 @@ jobs:
               exit 1
             fi
             echo "Direct URL: $DLURL"
-            curl -fSL "$DLURL" -o Ctc001.unitypackage
+            curl -fSL "$DLURL" -o 幾寱.unitypackage
           fi
 
           # サイズ・MIMEタイプ・中身チェック
-          echo "Downloaded size: $(du -h Ctc001.unitypackage | cut -f1)"
-          echo "MIME type: $(file --mime-type -b Ctc001.unitypackage)"
-          tar -tzf Ctc001.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
+          echo "Downloaded size: $(du -h 幾寱.unitypackage | cut -f1)"
+          echo "MIME type: $(file --mime-type -b 幾寱.unitypackage)"
+          tar -tzf 幾寱.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
 
       - name: Prepare clean output directory
         run: |
@@ -69,7 +69,7 @@ jobs:
       - name: Extract .unitypackage → assets-output
         run: |
           lwa_unity_unpack \
-            --input Ctc001.unitypackage \
+            --input 幾寱.unitypackage \
             --output assets-output \
             --copy-meta-files
           echo "✅ Extraction succeeded"
