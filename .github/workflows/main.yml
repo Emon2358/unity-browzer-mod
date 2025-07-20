@@ -16,7 +16,7 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Obtain 幾寱.unitypackage 📦
+      - name: VRCQuestTools-v2.11.0.unitypackage 📦
         id: obtain_pkg
         run: |
           # リポジトリ内の .unitypackage を検索
@@ -26,12 +26,12 @@ jobs:
             echo "✅ Found unitypackage in repo: $PKG"
             # realpath で絶対パスを比較し、同一ファイルならコピーをスキップ
             PKG_PATH=$(realpath "$PKG")
-            TARGET_PATH=$(realpath 幾寱.unitypackage 2>/dev/null || echo "")
+            TARGET_PATH=$(realpath VRCQuestTools-v2.11.0.unitypackage 2>/dev/null || echo "")
             if [[ "$PKG_PATH" != "$TARGET_PATH" ]]; then
               cp "$PKG" 幾寱.unitypackage
-              echo "🔄 Copied to 幾寱.unitypackage"
+              echo "🔄 Copied to VRCQuestTools-v2.11.0.unitypackage"
             else
-              echo "⏭️ Already 幾寱.unitypackage, skipping copy"
+              echo "⏭️ Already VRCQuestTools-v2.11.0.unitypackage, skipping copy"
             fi
           else
             echo "⏬ No unitypackage in repo; downloading from Workupload..."
@@ -43,12 +43,12 @@ jobs:
               exit 1
             fi
             echo "Direct URL: $DLURL"
-            curl -fSL "$DLURL" -o 幾寱.unitypackage
+            curl -fSL "$DLURL" -o VRCQuestTools-v2.11.0.unitypackage
           fi
 
           # サイズ・MIMEタイプ・中身チェック
           echo "Downloaded size: $(du -h 幾寱.unitypackage | cut -f1)"
-          echo "MIME type: $(file --mime-type -b 幾寱.unitypackage)"
+          echo "MIME type: $(file --mime-type -b VRCQuestTools-v2.11.0.unitypackage)"
           tar -tzf 幾寱.unitypackage >/dev/null 2>&1 || { echo "❌ Not a valid unitypackage (tar.gz)" >&2; exit 1; }
 
       - name: Prepare clean output directory
@@ -69,7 +69,7 @@ jobs:
       - name: Extract 幾寱.unitypackage → assets-output
         run: |
           lwa_unity_unpack \
-            --input 幾寱.unitypackage \
+            --input VRCQuestTools-v2.11.0.unitypackage \
             --output assets-output \
             --copy-meta-files
           echo "✅ Extraction succeeded"
@@ -87,6 +87,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "✅ No changes to commit"
           else
-            git commit -m "Update assets from 幾寱.unitypackage"
+            git commit -m "Update assets from VRCQuestTools-v2.11.0.unitypackage"
             git push
           fi
